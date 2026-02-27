@@ -1,0 +1,35 @@
+{
+  "name": "codepulse",
+  "version": "1.0.0",
+  "description": "CodePulse — Real-time cost analytics and session management for Claude Code",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.kccs.codepulse",
+    "productName": "CodePulse",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0"
+  },
+  "author": "KCCS <info@kccsonline.com> (https://kccsonline.com)",
+  "license": "MIT",
+  "homepage": "https://github.com/pueblokc/codepulse"
+}

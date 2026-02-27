@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>CodePulse</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- ===== Custom Titlebar ===== -->
+  <div id="titlebar">
+    <div id="titlebar-drag">
+      <span class="title-text">CODEPULSE</span>
+      <span class="title-version">v1.0</span>
+      <span id="cost-badge" class="cost-badge">$0.00 today</span>
+    </div>
+    <div id="titlebar-controls">
+      <button class="tb-btn" onclick="dashboard.minimize()" title="Minimize">&#x2014;</button>
+      <button class="tb-btn" onclick="dashboard.maximize()" title="Maximize">&#x25A1;</button>
+      <button class="tb-btn close-btn" onclick="dashboard.close()" title="Close to tray">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- ===== Tab Bar ===== -->
+  <div id="tab-bar">
+    <button class="tab active" data-tab="overview" onclick="showTab('overview')">Overview</button>
+    <button class="tab" data-tab="sessions" onclick="showTab('sessions')">Sessions</button>
+    <button class="tab" data-tab="costs" onclick="showTab('costs')">Cost Analysis</button>
+    <button class="tab" data-tab="settings" onclick="showTab('settings')">Settings</button>
+  </div>
+
+  <!-- ===== Main Content ===== -->
+  <div id="content">
+
+    <!-- ========== OVERVIEW TAB ========== -->
+    <div id="tab-overview" class="tab-content active">
+      <!-- Top Stats Row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Today</div>
+          <div class="stat-value yellow" id="stat-today-cost">$0.00</div>
+          <div class="stat-trend" id="stat-today-trend"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">This Week</div>
+          <div class="stat-value blue" id="stat-week-cost">$0.00</div>
+          <div class="stat-trend" id="stat-week-trend"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">This Month</div>
+          <div class="stat-value mauve" id="stat-month-cost">$0.00</div>
+          <div class="stat-trend" id="stat-month-trend"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Sessions</div>
+          <div class="stat-value green" id="stat-active-sessions">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Tokens</div>
+          <div class="stat-value peach" id="stat-total-tokens">0</div>
+          <div class="stat-sub" id="stat-token-breakdown"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cache Hit Rate</div>
+          <div class="stat-value teal" id="stat-cache-rate">0%</div>
+          <div class="stat-sub" id="stat-cache-saved"></div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">Model Distribution</div>
+          <div class="chart-container pie-chart-container">
+            <canvas id="modelPieChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Cost Timeline (30d)</div>
+          <div class="chart-container">
+            <canvas id="costTimelineChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity & Hour Heatmap -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">Recent Activity (7 Days)</div>
+          <div id="recent-activity-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">Peak Hours Heatmap</div>
+          <div id="hour-heatmap" class="hour-grid"></div>
+          <div id="peak-hour-label" class="stat-sub" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== SESSIONS TAB ========== -->
+    <div id="tab-sessions" class="tab-content">
+      <!-- Filters -->
+      <div class="filter-bar">
+        <input type="text" id="session-search" class="search-input" placeholder="Search sessions... (Ctrl+K)">
+        <select id="status-filter" class="filter-select">
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="recent">Recent</option>
+          <option value="idle">Idle</option>
+          <option value="stale">Stale</option>
+        </select>
+        <select id="model-filter" class="filter-select">
+          <option value="all">All Models</option>
+          <option value="opus">Opus</option>
+          <option value="sonnet">Sonnet</option>
+          <option value="haiku">Haiku</option>
+        </select>
+        <select id="sort-by" class="filter-select">
+          <option value="modified">Sort: Recent</option>
+          <option value="tokens">Sort: Tokens</option>
+          <option value="cost">Sort: Cost</option>
+          <option value="messages">Sort: Messages</option>
+          <option value="duration">Sort: Duration</option>
+        </select>
+        <span id="session-count" class="filter-count">0 sessions</span>
+        <div class="filter-spacer"></div>
+        <button class="btn btn-sm" onclick="exportAll('csv')">Export CSV</button>
+        <button class="btn btn-sm" onclick="exportAll('json')">Export JSON</button>
+      </div>
+
+      <!-- Session Table -->
+      <div class="card no-pad">
+        <table id="sessions-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Session</th>
+              <th>Messages</th>
+              <th>Tools</th>
+              <th>Tokens</th>
+              <th>Cost Est.</th>
+              <th>Duration</th>
+              <th>Model</th>
+              <th>Description</th>
+              <th>Age</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-bar" id="pagination-bar">
+        <button class="btn btn-sm" id="page-prev" onclick="changePage(-1)">&#8592; Prev</button>
+        <span id="page-info" class="page-info">Page 1 of 1</span>
+        <button class="btn btn-sm" id="page-next" onclick="changePage(1)">Next &#8594;</button>
+      </div>
+    </div>
+
+    <!-- ========== COST ANALYSIS TAB ========== -->
+    <div id="tab-costs" class="tab-content">
+      <!-- Cost Summary Cards -->
+      <div class="stats-row">
+        <div class="stat-card gradient-red">
+          <div class="stat-label">Estimated API Cost</div>
+          <div class="stat-value" id="cost-total-api">$0.00</div>
+          <div class="stat-sub">If using Anthropic API directly</div>
+        </div>
+        <div class="stat-card gradient-green">
+          <div class="stat-label">Cache Savings</div>
+          <div class="stat-value" id="cost-cache-savings">$0.00</div>
+          <div class="stat-sub">Saved by prompt caching</div>
+        </div>
+        <div class="stat-card gradient-blue">
+          <div class="stat-label">Your Actual Cost</div>
+          <div class="stat-value" id="cost-subscription">$200/mo</div>
+          <div class="stat-sub">Monthly subscription (flat rate)</div>
+        </div>
+        <div class="stat-card gradient-mauve">
+          <div class="stat-label">Projected Monthly</div>
+          <div class="stat-value" id="cost-projected">$0.00</div>
+          <div class="stat-sub">Based on daily average</div>
+        </div>
+      </div>
+
+      <!-- Cost Breakdown -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">Cost Breakdown by Model</div>
+          <table class="cost-table">
+            <thead>
+              <tr><th>Model</th><th>Input</th><th>Output</th><th>Cache Read</th><th>Cache Write</th><th>Total</th></tr>
+            </thead>
+            <tbody id="cost-breakdown-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-header">ROI Analysis</div>
+          <div id="roi-content" class="roi-grid"></div>
+          <div class="card-divider"></div>
+          <div class="card-header" style="margin-top:16px;">Pricing Reference (per 1M tokens)</div>
+          <table class="cost-table small">
+            <thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Cache R</th><th>Cache W</th></tr></thead>
+            <tbody>
+              <tr><td>Opus 4.6</td><td>$15</td><td>$75</td><td>$1.50</td><td>$18.75</td></tr>
+              <tr><td>Sonnet 4.6</td><td>$3</td><td>$15</td><td>$0.30</td><td>$3.75</td></tr>
+              <tr><td>Haiku 4.5</td><td>$1</td><td>$5</td><td>$0.10</td><td>$1.25</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Daily/Weekly Charts -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">Daily Cost Estimate</div>
+          <div class="chart-container">
+            <canvas id="dailyCostChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Token Usage by Model</div>
+          <div class="chart-container">
+            <canvas id="tokensByModelChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Budget Alert -->
+      <div class="card" id="budget-alert-card" style="display:none;">
+        <div class="card-header" style="color:var(--red);">Budget Alert</div>
+        <div id="budget-alert-content"></div>
+      </div>
+    </div>
+
+    <!-- ========== SETTINGS TAB ========== -->
+    <div id="tab-settings" class="tab-content">
+      <div class="settings-grid">
+        <div class="settings-section">
+          <div class="settings-section-title">Dashboard</div>
+          <div class="setting-row">
+            <label>Refresh interval (seconds)</label>
+            <input type="number" id="set-refresh" class="setting-input" min="5" max="300" value="30">
+          </div>
+          <div class="setting-row">
+            <label>History days (charts)</label>
+            <input type="number" id="set-history" class="setting-input" min="7" max="365" value="30">
+          </div>
+          <div class="setting-row">
+            <label>Active session threshold (minutes)</label>
+            <input type="number" id="set-active-thresh" class="setting-input" min="1" max="60" value="10">
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Budget &amp; Cost</div>
+          <div class="setting-row">
+            <label>Monthly subscription cost ($)</label>
+            <input type="number" id="set-subscription-cost" class="setting-input" min="0" step="10" value="200">
+          </div>
+          <div class="setting-row">
+            <label>Monthly budget alert ($)</label>
+            <input type="number" id="set-budget" class="setting-input" min="0" step="10" value="100">
+          </div>
+          <div class="setting-row">
+            <label>Daily cost warning ($)</label>
+            <input type="number" id="set-daily-warn" class="setting-input" min="0" step="1" value="10">
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Usage Limits (Estimates)</div>
+          <div class="stat-sub" style="margin-bottom:12px;">Claude does not publish exact limits. Adjust to match your observed caps.</div>
+          <div class="setting-row">
+            <label>Weekly all-models limit (tokens)</label>
+            <input type="number" id="set-weekly-all" class="setting-input wide" value="3200000">
+          </div>
+          <div class="setting-row">
+            <label>Weekly Sonnet limit (tokens)</label>
+            <input type="number" id="set-weekly-sonnet" class="setting-input wide" value="15000000">
+          </div>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        <button class="btn" onclick="resetSettings()">Reset Defaults</button>
+      </div>
+      <div class="stat-sub" style="margin-top:16px;">
+        <strong>Keyboard Shortcuts:</strong>
+        <kbd>1</kbd>-<kbd>4</kbd> Switch tabs &middot;
+        <kbd>Ctrl+K</kbd> Search sessions &middot;
+        <kbd>Ctrl+Shift+D</kbd> Toggle window &middot;
+        <kbd>R</kbd> Refresh &middot;
+        <kbd>Esc</kbd> Close modal
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Session Detail Modal ===== -->
+  <div id="session-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modal-title">Session Details</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- ===== Toast Container ===== -->
+  <div id="toast-container"></div>
+
+  <!-- ===== Status Bar ===== -->
+  <div id="statusbar">
+    <span id="status-text">Loading...</span>
+    <span id="status-sessions"></span>
+    <span class="live-clock" id="live-clock"></span>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="kccs-branding.js"></script>
+</body>
+</html>
