@@ -5,6 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test",
     "build": "electron-builder --win",
     "build:dir": "electron-builder --win --dir"
   },
@@ -15,21 +18,37 @@
       "output": "dist"
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "package.json"
+    ]
   },
   "devDependencies": {
-    "electron": "^34.0.0",
-    "electron-builder": "^25.0.0"
+    "@eslint/js": "^10.0.1",
+    "electron": "^44.9.3",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0"
   },
   "dependencies": {
     "chokidar": "^4.0.0"
   },
   "author": "KCCS <info@kccsonline.com> (https://kccsonline.com)",
   "license": "MIT",
-  "homepage": "https://github.com/pueblokc/codepulse"
+  "homepage": "https://github.com/pueblokc/codepulse",
+  "engines": {
+    "node": ">=20"
+  }
 }
