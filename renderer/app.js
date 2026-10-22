@@ -135,6 +135,13 @@ function renderOverview() {
   if (!costs) return;
 
   setText('stat-today-cost', formatCost(costs.todayCost));
+  const dailyWarn = appData.config && appData.config.dailyBudgetWarn;
+  const trend = document.getElementById('stat-today-trend');
+  if (trend) {
+    const over = dailyWarn > 0 && costs.todayCost > dailyWarn;
+    trend.textContent = over ? `Over daily warning (${formatCost(dailyWarn)})` : '';
+    trend.style.color = over ? 'var(--red)' : '';
+  }
   setText('stat-week-cost', formatCost(costs.weekCost));
   setText('stat-month-cost', formatCost(costs.monthCost));
 
@@ -575,8 +582,10 @@ function closeModal() {
 }
 
 // ---- Export ----
+// Exports the sessions matching the current search/filters.
 function exportAll(format) {
-  dashboard.exportSessions(format, null).then(ok => {
+  const ids = filteredSessions.length === allSessions.length ? null : filteredSessions.map(s => s.session_id);
+  dashboard.exportSessions(format, ids).then(ok => {
     if (ok) showToast('Export saved successfully', 'success');
   }).catch(() => showToast('Export failed', 'error'));
 }
