@@ -17,18 +17,18 @@
       <span id="cost-badge" class="cost-badge">$0.00 today</span>
     </div>
     <div id="titlebar-controls">
-      <button class="tb-btn" onclick="dashboard.minimize()" title="Minimize">&#x2014;</button>
-      <button class="tb-btn" onclick="dashboard.maximize()" title="Maximize">&#x25A1;</button>
-      <button class="tb-btn close-btn" onclick="dashboard.close()" title="Close to tray">&#x2715;</button>
+      <button class="tb-btn" data-action="minimize" title="Minimize">&#x2014;</button>
+      <button class="tb-btn" data-action="maximize" title="Maximize">&#x25A1;</button>
+      <button class="tb-btn close-btn" data-action="close" title="Close to tray">&#x2715;</button>
     </div>
   </div>
 
   <!-- ===== Tab Bar ===== -->
   <div id="tab-bar">
-    <button class="tab active" data-tab="overview" onclick="showTab('overview')">Overview</button>
-    <button class="tab" data-tab="sessions" onclick="showTab('sessions')">Sessions</button>
-    <button class="tab" data-tab="costs" onclick="showTab('costs')">Cost Analysis</button>
-    <button class="tab" data-tab="settings" onclick="showTab('settings')">Settings</button>
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="sessions">Sessions</button>
+    <button class="tab" data-tab="costs">Cost Analysis</button>
+    <button class="tab" data-tab="settings">Settings</button>
   </div>
 
   <!-- ===== Main Content ===== -->
@@ -113,6 +113,7 @@
         </select>
         <select id="model-filter" class="filter-select">
           <option value="all">All Models</option>
+          <option value="fable">Fable</option>
           <option value="opus">Opus</option>
           <option value="sonnet">Sonnet</option>
           <option value="haiku">Haiku</option>
@@ -126,8 +127,8 @@
         </select>
         <span id="session-count" class="filter-count">0 sessions</span>
         <div class="filter-spacer"></div>
-        <button class="btn btn-sm" onclick="exportAll('csv')">Export CSV</button>
-        <button class="btn btn-sm" onclick="exportAll('json')">Export JSON</button>
+        <button class="btn btn-sm" data-action="export" data-format="csv">Export CSV</button>
+        <button class="btn btn-sm" data-action="export" data-format="json">Export JSON</button>
       </div>
 
       <!-- Session Table -->
@@ -153,9 +154,9 @@
 
       <!-- Pagination -->
       <div class="pagination-bar" id="pagination-bar">
-        <button class="btn btn-sm" id="page-prev" onclick="changePage(-1)">&#8592; Prev</button>
+        <button class="btn btn-sm" id="page-prev" data-action="page" data-delta="-1">&#8592; Prev</button>
         <span id="page-info" class="page-info">Page 1 of 1</span>
-        <button class="btn btn-sm" id="page-next" onclick="changePage(1)">Next &#8594;</button>
+        <button class="btn btn-sm" id="page-next" data-action="page" data-delta="1">Next &#8594;</button>
       </div>
     </div>
 
@@ -202,12 +203,8 @@
           <div class="card-divider"></div>
           <div class="card-header" style="margin-top:16px;">Pricing Reference (per 1M tokens)</div>
           <table class="cost-table small">
-            <thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Cache R</th><th>Cache W</th></tr></thead>
-            <tbody>
-              <tr><td>Opus 4.6</td><td>$15</td><td>$75</td><td>$1.50</td><td>$18.75</td></tr>
-              <tr><td>Sonnet 4.6</td><td>$3</td><td>$15</td><td>$0.30</td><td>$3.75</td></tr>
-              <tr><td>Haiku 4.5</td><td>$1</td><td>$5</td><td>$0.10</td><td>$1.25</td></tr>
-            </tbody>
+            <thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Cache R</th><th>Cache W (5m)</th></tr></thead>
+            <tbody id="pricing-reference-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -282,8 +279,8 @@
         </div>
       </div>
       <div class="settings-actions">
-        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-        <button class="btn" onclick="resetSettings()">Reset Defaults</button>
+        <button class="btn btn-primary" data-action="save-settings">Save Settings</button>
+        <button class="btn" data-action="reset-settings">Reset Defaults</button>
       </div>
       <div class="stat-sub" style="margin-top:16px;">
         <strong>Keyboard Shortcuts:</strong>
@@ -301,7 +298,7 @@
     <div class="modal">
       <div class="modal-header">
         <span id="modal-title">Session Details</span>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <button class="modal-close" data-action="close-modal">&times;</button>
       </div>
       <div id="modal-content"></div>
     </div>

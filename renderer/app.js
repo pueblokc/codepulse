@@ -66,12 +66,14 @@ function showTab(tabId) {
     requestAnimationFrame(() => renderCharts());
   }
 
-  localStorage.setItem('activeTab', tabId);
+  try { localStorage.setItem('activeTab', tabId); } catch { /* storage unavailable */ }
 }
 
 // Restore last active tab
-const savedTab = localStorage.getItem('activeTab');
-if (savedTab) showTab(savedTab);
+try {
+  const savedTab = localStorage.getItem('activeTab');
+  if (savedTab && document.getElementById('tab-' + savedTab)) showTab(savedTab);
+} catch { /* storage unavailable */ }
 
 // ---- Chart.js Global Config ----
 const CHART_COLORS = {
@@ -154,7 +156,7 @@ function renderOverview() {
   if (container) {
     container.innerHTML = recentDays.map(d => `
       <div class="activity-row">
-        <span class="activity-date">${d.date || ''}</span>
+        <span class="activity-date">${escapeHtml(d.date || '')}</span>
         <span class="activity-stats">${d.messageCount || 0} msgs &middot; ${d.sessionCount || 0} sess &middot; ${d.toolCallCount || 0} tools</span>
       </div>
     `).join('') || '<div class="stat-sub">No recent activity</div>';
@@ -228,18 +230,17 @@ function renderSessionPage() {
   tbody.innerHTML = pageRows.map(s => {
     const tokens = (s.tokens?.input || 0) + (s.tokens?.output || 0);
     const cost = estimateSessionCost(s);
-    const primaryModel = getPrimaryModel(s.models_used);
     return `
-      <tr class="clickable" onclick="showSessionModal('${escapeHtml(s.session_id)}')">
-        <td><span class="status-badge status-${s.status}">${s.status}</span></td>
-        <td class="id-cell">${s.session_id.substring(0, 12)}...</td>
+      <tr class="clickable" data-session-id="${escapeHtml(s.session_id)}">
+        <td><span class="status-badge status-${escapeHtml(s.status)}">${escapeHtml(s.status)}</span></td>
+        <td class="id-cell" title="${escapeHtml(s.session_id)}">${escapeHtml(s.session_id.substring(0, 12))}...</td>
         <td>${s.messages || 0}</td>
         <td>${s.tool_calls || 0}</td>
         <td>${formatTokens(tokens)}</td>
         <td>${formatCost(cost)}</td>
         <td>${s.duration_minutes || 0}m</td>
-        <td><span style="color:${getModelColor(primaryModel)}">${getModelShort(primaryModel)}</span></td>
-        <td class="desc-cell">${escapeHtml((s.description || '').substring(0, 60))}</td>
+        <td><span style="color:${safeColor(s.primary_model_color)}">${escapeHtml(s.primary_model_label || '-')}</span></td>
+        <td class="desc-cell" title="${escapeHtml(s.title || s.description || '')}">${escapeHtml((s.title || s.description || '').substring(0, 60))}</td>
         <td>${formatAge(s.modified)}</td>
       </tr>
     `;
@@ -264,77 +265,22 @@ function changePage(delta) {
   renderSessionPage();
 }
 
-// ---- Session Cost Estimation (unified via cost-calculator logic) ----
-// Uses the same pricing logic as cost-calculator.js on the main process.
-// Kept in renderer for sorting/display without IPC round-trip.
-const PRICING = {
-  'claude-opus-4-6':             { input: 15.0, output: 75.0, cache_read: 1.5,  cache_write: 18.75 },
-  'claude-opus-4-5-20251101':    { input: 15.0, output: 75.0, cache_read: 1.5,  cache_write: 18.75 },
-  'claude-sonnet-4-6':           { input: 3.0,  output: 15.0, cache_read: 0.3,  cache_write: 3.75 },
-  'claude-sonnet-4-5-20250929':  { input: 3.0,  output: 15.0, cache_read: 0.3,  cache_write: 3.75 },
-  'claude-haiku-4-5-20251001':   { input: 1.0,  output: 5.0,  cache_read: 0.1,  cache_write: 1.25 },
-  'claude-3-5-haiku-20241022':   { input: 0.80, output: 4.0,  cache_read: 0.08, cache_write: 1.0  },
-};
-const DEFAULT_PRICING = PRICING['claude-sonnet-4-6'];
-
-function getPricingForModel(model) {
-  if (!model) return DEFAULT_PRICING;
-  if (PRICING[model]) return PRICING[model];
-  const m = model.toLowerCase();
-  if (m.includes('opus'))   return PRICING['claude-opus-4-6'];
-  if (m.includes('sonnet')) return PRICING['claude-sonnet-4-6'];
-  if (m.includes('haiku'))  return PRICING['claude-haiku-4-5-20251001'];
-  return DEFAULT_PRICING;
-}
-
+// ---- Session Cost ----
+// Costs are computed in the main process (lib/pricing.js) per model, so the
+// renderer never carries its own copy of the price table.
 function estimateSessionCost(s) {
-  if (!s || !s.tokens) return 0;
-  const t = s.tokens;
-  const models = s.models_used || [];
-
-  let p = DEFAULT_PRICING;
-  if (models.length === 1) {
-    p = getPricingForModel(models[0]);
-  } else if (models.some(m => m.toLowerCase().includes('opus'))) {
-    p = PRICING['claude-opus-4-6'];
-  } else if (models.some(m => m.toLowerCase().includes('sonnet'))) {
-    p = PRICING['claude-sonnet-4-6'];
-  }
-
-  return (t.input || 0)         / 1e6 * p.input
-       + (t.output || 0)        / 1e6 * p.output
-       + (t.cache_read || 0)    / 1e6 * p.cache_read
-       + (t.cache_creation || 0) / 1e6 * p.cache_write;
+  return s && typeof s.cost_usd === 'number' ? s.cost_usd : 0;
 }
 
-function getPrimaryModel(models) {
-  if (!models || models.length === 0) return '';
-  const opus = models.find(m => m.includes('opus'));
-  if (opus) return opus;
-  const sonnet = models.find(m => m.includes('sonnet'));
-  if (sonnet) return sonnet;
-  return models[0];
+// Only allow #rgb / #rrggbb colours into style attributes.
+function safeColor(c) {
+  return typeof c === 'string' && /^#[0-9a-fA-F]{3,6}$/.test(c) ? c : '#a6adc8';
 }
 
-function getModelShort(model) {
-  if (!model) return '-';
-  const m = model.toLowerCase();
-  if (m.includes('opus-4-6'))    return 'Opus 4.6';
-  if (m.includes('opus'))        return 'Opus';
-  if (m.includes('sonnet-4-6'))  return 'Sonnet 4.6';
-  if (m.includes('sonnet'))      return 'Sonnet';
-  if (m.includes('haiku-4-5'))   return 'Haiku 4.5';
-  if (m.includes('haiku'))       return 'Haiku';
-  return model.split('-').slice(-2).join(' ');
-}
-
-function getModelColor(model) {
-  if (!model) return '#6c7086';
-  const m = model.toLowerCase();
-  if (m.includes('opus'))   return '#cba6f7';
-  if (m.includes('sonnet')) return '#89b4fa';
-  if (m.includes('haiku'))  return '#a6e3a1';
-  return '#a6adc8';
+function formatRate(n) {
+  if (Number.isInteger(n)) return '$' + n;
+  if (n >= 0.1) return '$' + n.toFixed(2);
+  return '$' + n.toFixed(3).replace(/0$/, '');
 }
 
 // ---- Render: Cost Analysis Tab ----
@@ -354,10 +300,9 @@ function renderCosts() {
   const tbody = document.getElementById('cost-breakdown-tbody');
   if (tbody) {
     const rows = Object.entries(costs.modelCosts || {}).map(([model, c]) => {
-      const name = getModelShort(model);
       return `
         <tr>
-          <td><strong style="color:${getModelColor(model)}">${name}</strong></td>
+          <td><strong style="color:${safeColor(c.color)}" title="${escapeHtml(model)}">${escapeHtml(c.name || model)}</strong></td>
           <td>${formatCost(c.input)}</td>
           <td>${formatCost(c.output)}</td>
           <td>${formatCost(c.cacheRead)}</td>
@@ -380,6 +325,14 @@ function renderCosts() {
     tbody.innerHTML = rows.length > 0
       ? rows.join('')
       : '<tr><td colspan="6" style="color:var(--overlay0);text-align:center;padding:20px;">No model data available yet</td></tr>';
+  }
+
+  // Pricing reference (from lib/pricing.js via main)
+  const refBody = document.getElementById('pricing-reference-tbody');
+  if (refBody && Array.isArray(costs.pricingReference)) {
+    refBody.innerHTML = costs.pricingReference.map(p => `
+      <tr><td>${escapeHtml(p.label)}</td><td>${formatRate(p.input)}</td><td>${formatRate(p.output)}</td><td>${formatRate(p.cache_read)}</td><td>${formatRate(p.cache_write)}</td></tr>
+    `).join('');
   }
 
   // ROI Analysis using the configurable subscription cost
@@ -497,6 +450,7 @@ function renderCharts() {
       data: {
         labels: charts.dates,
         datasets: [
+          { label: 'Fable',  data: charts.fableTokens || [], backgroundColor: CHART_COLORS.yellow },
           { label: 'Opus',   data: charts.opusTokens,   backgroundColor: CHART_COLORS.mauve },
           { label: 'Sonnet', data: charts.sonnetTokens, backgroundColor: CHART_COLORS.blue },
           { label: 'Haiku',  data: charts.haikuTokens,  backgroundColor: CHART_COLORS.green },
@@ -552,7 +506,10 @@ function saveSettings() {
       config.lastBudgetAlertDate = existing.lastBudgetAlertDate;
     }
   }
-  dashboard.saveConfig(config).then(() => showToast('Settings saved', 'success'));
+  dashboard.saveConfig(config).then(ok => {
+    if (ok) showToast('Settings saved', 'success');
+    else showToast('Could not save settings', 'error');
+  });
 }
 
 function resetSettings() {
@@ -566,8 +523,9 @@ function resetSettings() {
     weeklyAllModelsLimit: 3200000,
     weeklySonnetLimit: 15000000,
   };
-  dashboard.saveConfig(defaults).then(() => {
-    showToast('Settings reset to defaults', 'success');
+  dashboard.saveConfig(defaults).then(ok => {
+    if (ok) showToast('Settings reset to defaults', 'success');
+    else showToast('Could not save settings', 'error');
   });
 }
 
@@ -597,13 +555,14 @@ function showSessionModal(sessionId) {
     </div>
     <table class="modal-detail-table">
       <tr><td>Session ID</td><td><code>${escapeHtml(s.session_id)}</code></td></tr>
-      <tr><td>Status</td><td><span class="status-badge status-${s.status}">${s.status}</span></td></tr>
-      <tr><td>Size</td><td>${formatSize(s.size_bytes)}</td></tr>
-      <tr><td>Created</td><td>${s.created || 'Unknown'}</td></tr>
-      <tr><td>Modified</td><td>${s.modified}</td></tr>
+      <tr><td>Status</td><td><span class="status-badge status-${escapeHtml(s.status)}">${escapeHtml(s.status)}</span></td></tr>
+      ${s.title ? `<tr><td>Title</td><td>${escapeHtml(s.title)}</td></tr>` : ''}
+      <tr><td>Size</td><td>${formatSize(s.size_bytes)}${s.subagent_files ? ` (incl. ${s.subagent_files} sub-agent transcript${s.subagent_files > 1 ? 's' : ''})` : ''}</td></tr>
+      <tr><td>Created</td><td>${s.created ? escapeHtml(new Date(s.created).toLocaleString()) : 'Unknown'}</td></tr>
+      <tr><td>Modified</td><td>${escapeHtml(new Date(s.modified).toLocaleString())}</td></tr>
       <tr><td>Duration</td><td>${s.duration_minutes || 0} minutes</td></tr>
       <tr><td>Working Dir</td><td><code>${escapeHtml(s.cwd || 'N/A')}</code></td></tr>
-      <tr><td>Models</td><td>${(s.models_used || []).map(m => `<span style="color:${getModelColor(m)}">${getModelShort(m)}</span>`).join(', ') || 'N/A'}</td></tr>
+      <tr><td>Models</td><td>${(s.models_display || []).map(m => `<span style="color:${safeColor(m.color)}" title="${escapeHtml(m.model)}">${escapeHtml(m.label)}</span>`).join(', ') || 'N/A'}</td></tr>
       <tr><td>Cache Read</td><td>${formatTokens(s.tokens?.cache_read)}</td></tr>
       <tr><td>Cache Write</td><td>${formatTokens(s.tokens?.cache_creation)}</td></tr>
     </table>
@@ -619,7 +578,7 @@ function closeModal() {
 function exportAll(format) {
   dashboard.exportSessions(format, null).then(ok => {
     if (ok) showToast('Export saved successfully', 'success');
-  });
+  }).catch(() => showToast('Export failed', 'error'));
 }
 
 // ---- Toast ----
@@ -695,6 +654,30 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     showTab('sessions');
     setTimeout(() => document.getElementById('session-search')?.focus(), 100);
+  }
+});
+
+// ---- Click handling ----
+// The CSP (script-src 'self') blocks inline onclick="" attributes, so every
+// button is wired up here via data-* attributes instead.
+document.addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]');
+  if (tab && tab.classList.contains('tab')) { showTab(tab.dataset.tab); return; }
+
+  const row = e.target.closest('tr[data-session-id]');
+  if (row) { showSessionModal(row.dataset.sessionId); return; }
+
+  const btn = e.target.closest('[data-action]');
+  if (!btn || btn.disabled) return;
+  switch (btn.dataset.action) {
+    case 'minimize': dashboard.minimize(); break;
+    case 'maximize': dashboard.maximize(); break;
+    case 'close': dashboard.close(); break;
+    case 'export': exportAll(btn.dataset.format); break;
+    case 'page': changePage(parseInt(btn.dataset.delta, 10) || 0); break;
+    case 'save-settings': saveSettings(); break;
+    case 'reset-settings': resetSettings(); break;
+    case 'close-modal': closeModal(); break;
   }
 });
 
