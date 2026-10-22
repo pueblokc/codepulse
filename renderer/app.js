@@ -658,7 +658,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---- Click handling ----
-// The CSP (script-src 'self') blocks inline onclick="" attributes, so every
+// The CSP (script-src 'self') blocks inline on* handler attributes, so every
 // button is wired up here via data-* attributes instead.
 document.addEventListener('click', (e) => {
   const tab = e.target.closest('[data-tab]');
